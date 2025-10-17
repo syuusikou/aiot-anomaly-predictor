@@ -1,0 +1,12 @@
+# --- FastAPI 框架和服务器 ---
+fastapi
+uvicorn[standard]
+
+# --- AI/ML 和数据处理库 ---
+pandas
+numpy
+scikit-learn
+joblib
+
+# --- 数据校验 ---
+pydantic

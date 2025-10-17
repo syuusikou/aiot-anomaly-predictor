@@ -1,0 +1,35 @@
+# -------------------- Python 環境とキャッシュ --------------------
+# 仮想環境ディレクトリ
+myvenv/
+venv/
+.env
+
+Lib/
+Include/
+Scripts/
+
+# Python のコンパイル・キャッシュファイル
+__pycache__/
+*.pyc
+*.pyd
+*.so
+.mypy_cache/
+.pytest_cache/
+
+# IDE/エディタ関連ファイル
+.vscode/
+.idea/
+
+# -------------------- モデルとデータファイル --------------------
+# 学習済みの AI モデルファイルを無視（通常は大きく、コミット不要）
+anomaly_detector.pkl
+# 生成した学習用データファイルを無視
+simulated_power_data.csv
+
+# -------------------- フロントエンド (Node/Vite) --------------------
+# Node 依存ディレクトリ
+/frontend/node_modules
+# Vite/npm のビルド出力ディレクトリ
+/frontend/dist
+# フロントエンドのキャッシュ
+/frontend/.vite/
