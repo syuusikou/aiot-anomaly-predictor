@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { v4 as uuidv4 } from 'uuid'; // 一意のIDを生成するための例。実際には省略可
 
 // API 設定
-// const API_URL = 'http://127.0.0.1:8000/predict_anomaly';
 const API_BASE_URL = 'http://127.0.0.1:8000'; // ベースURL
 const API_ENDPOINT = '/predict_anomaly';
 
@@ -63,7 +61,6 @@ const SimulationPanel = () => {
         setMessage('');
 
         const dataToSend = generateSimulationData(isAnomaly);
-        setLastData(dataToSend.time_series); // 送信データを表示用に保存
 
         try {
             // Axios で FastAPI の POST エンドポイントを呼び出し
@@ -72,6 +69,16 @@ const SimulationPanel = () => {
             // バックエンドのJSON応答を受信
             const result = response.data;
 
+            // ✅ 変更点：API 応答から完全なスコア付きデータリストを取得
+            if (result && result.submitted_data_preview && Array.isArray(result.submitted_data_preview)) {
+                // 状態変数は setLastData に割り当て
+                setLastData(result.submitted_data_preview);
+            } else {
+                // データ構造が予期しないエラーを処理
+                console.error("API 応答データ構造エラー: submitted_data_preview キーがありません");
+                setLastData([]); // エラー時にリストを空にする
+            }
+            
             setStatus(result.status);
             setScore(result.average_anomaly_score.toFixed(4));
             setMessage(result.message);
@@ -142,10 +149,46 @@ const SimulationPanel = () => {
             {/* --- データ送信プレビュー --- */}
             {lastData.length > 0 && (
                 <div style={{ marginTop: '20px', fontSize: '0.9em' }}>
-                    <h4>直近の送信データプレビュー:</h4>
-                    <pre style={{ backgroundColor: '#f4f4f4', padding: '10px', borderRadius: '5px' }}>
-                        {JSON.stringify({ time_series: lastData }, null, 2)}
-                    </pre>
+                    <h4>直近の送信データプレビュー (AI 予測結果を含む):</h4>
+                    
+                    {/* データを表やリストで表示することで、JSON.stringifyより分かりやすくなります */}
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                            <tr style={{ backgroundColor: 'transparent' }}>
+                                <th style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>タイムスタンプ (UTC)</th>
+                                <th style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>電力 (kW)</th>
+                                <th style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>異常スコア</th>
+                                <th style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>予測</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {/* lastDataを繰り返し処理し、現在は anomaly_score と is_anomaly を含みます */}
+                            {lastData.map((dataPoint, index) => (
+                                <tr key={index} style={{ backgroundColor: dataPoint.is_anomaly === -1 ? 'transparent' : 'inherit' }}>
+                                    <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>
+                                        {new Date(dataPoint.timestamp).toLocaleString('ja-JP', { 
+                                            year: 'numeric', 
+                                            month: '2-digit', 
+                                            day: '2-digit', 
+                                            hour: '2-digit', 
+                                            minute: '2-digit', 
+                                            second: '2-digit',
+                                            hour12: false // 24 時間制
+                                        })}
+                                    </td>
+                                    <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>
+                                        {dataPoint.power_kW.toFixed(2)}
+                                    </td>
+                                    <td style={{ padding: '8px', borderBottom: '1px solid #eee', color: dataPoint.anomaly_score < 0.05 ? 'red' : 'green' }}>
+                                        {dataPoint.anomaly_score.toFixed(4)}
+                                    </td>
+                                    <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>
+                                        {dataPoint.is_anomaly === -1 ? '⚠️ 異常' : '✅ 正常'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>

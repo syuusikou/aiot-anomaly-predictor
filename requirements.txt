@@ -1,12 +1,12 @@
-# --- FastAPI 框架和服务器 ---
+# --- FastAPI フレームワークとサーバー ---
 fastapi
 uvicorn[standard]
 
-# --- AI/ML 和数据处理库 ---
+# --- AI/ML およびデータ処理ライブラリ ---
 pandas
 numpy
 scikit-learn
 joblib
 
-# --- 数据校验 ---
+# --- データ検証 ---
 pydantic

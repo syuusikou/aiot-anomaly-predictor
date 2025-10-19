@@ -32,21 +32,6 @@ app.add_middleware(
     allow_headers=["*"],                # すべてのヘッダーを許可
 )
 
-
-# --- CORS 設定 ---
-origins = [
-    # 1. localhost でのフロントエンドアクセスを許可
-    "http://localhost:5173",  
-    # 2. IP アドレスでのフロントエンドアクセスを許可
-    "http://127.0.0.1:5173",
-    # 3. バックエンド自身の自己アクセスを許可（任意だが推奨）
-    "http://localhost:8000",
-]
-
-# --- CORS 設定終了 ---
-
-# ...（API のルートとロジックは変更なし）...
-
 # --- 1. 設定とモデルの読み込み ---
 MODEL_PATH = 'anomaly_detector.pkl'
 
@@ -85,18 +70,26 @@ class TimeSeriesData(BaseModel):
         description="時系列順に並んだセンサーデータ点のリスト。"
     )
 
+# リスト内の単一データポイントの構造を定義
+class PreviewDataPoint(BaseModel):
+    timestamp: datetime = Field(..., description="データポイントのタイムスタンプ。")
+    power_kW: float = Field(..., description="元の消費電力値 (kW)。")
+    anomaly_score: float = Field(..., description="Isolation Forest の異常スコア。")
+    is_anomaly: int = Field(..., description="予測ラベル (1: 正常, -1: 異常)。")
+
 # API 応答の構造を定義
 class PredictionResponse(BaseModel):
     """異常予測 API の応答構造を定義。"""
     status: str = Field(..., description="予測ステータス: Normal（正常）または Warning（警告）。")
     average_anomaly_score: float = Field(..., description="今回の入力データの平均異常スコア。値が低いほど異常。")
     message: str = Field(..., description="呼び出し側への簡潔な説明。")
+    # 👇 新しいフィールド：フロントエンドのリストプレビュー用データ
+    submitted_data_preview: list[PreviewDataPoint] = Field(
+        ..., 
+        description="今回送信されたすべてのデータポイントおよびその予測結果のリスト。"
+    )
 
 # --- 3. コア予測 API ルート ---
-
-# ...（前段の内容は変更なし: モデル読み込み、FastAPI 初期化、Pydantic モデル定義）...
-
-# --- コア予測 API ルート: 前処理の強化 ---
 
 # しきい値の定義: 平均異常スコアの判定に使用。モデルの学習状況に応じて調整してください。
 # IsolationForest の decision_function スコア: 値が低いほど異常。
@@ -114,7 +107,7 @@ def predict_anomaly(data: TimeSeriesData):
         # Pydantic 入力データを Pandas DataFrame に変換
         df_input = pd.DataFrame([p.model_dump() for p in data.time_series])
         
-        # データを時系列順に並べ替える（時系列解析のベストプラクティス）
+        # データを時系列順に並べ替える
         df_input['timestamp'] = pd.to_datetime(df_input['timestamp'])
         df_input.set_index('timestamp', inplace=True)
         
@@ -142,8 +135,22 @@ def predict_anomaly(data: TimeSeriesData):
         # モデル推論中に発生したエラーを捕捉
         raise HTTPException(status_code=500, detail=f"内部サーバーエラー: モデル推論に失敗しました。システム管理者に連絡してください。{e}")
 
+    # 3. **【新規】submitted_data_preview リストを構築** # zip を使用して原始データ、スコア、予測ラベルを組み合わせる
+    submitted_data_preview_list = []
+    
+    # 原始データ点のリスト (DataPoint Pydantic オブジェクト)
+    raw_data_points = data.time_series
+    
+    # zip を使用して原始データ、スコア、予測ラベルを組み合わせ、PreviewDataPoint 要求の辞書形式にまとめる
+    for raw_point, score, prediction in zip(raw_data_points, anomaly_scores, predictions):
+        submitted_data_preview_list.append({
+            "timestamp": raw_point.timestamp, 
+            "power_kW": raw_point.power_kW,
+            "anomaly_score": float(score),       # 標準の float に変換
+            "is_anomaly": int(prediction)        # 変換を int (-1 または 1)
+        })
 
-    # 3. ステータス判定と応答の構築
+    # 4. ステータス判定と応答の構築
     
     # ロジック: いずれかの点が異常（-1）または平均スコアがしきい値未満の場合は Warning
     is_hard_anomaly = -1 in predictions
@@ -160,5 +167,6 @@ def predict_anomaly(data: TimeSeriesData):
     return PredictionResponse(
         status=status,
         average_anomaly_score=float(avg_score),
-        message=message
+        message=message,
+        submitted_data_preview=submitted_data_preview_list  # <--- 最終的な割り当て
     )
